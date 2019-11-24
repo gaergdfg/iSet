@@ -1,5 +1,5 @@
 iSet-save.ml
 *.cmi
 *.cmo
-./testuj.sh
+testuj.sh
 /tests
