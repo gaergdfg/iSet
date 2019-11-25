@@ -1,9 +1,15 @@
+(*  type representing range  *)
 type range = Range of int * int
-type amount = Double of int * int
+
+(*  type representing interval set, has structure of a binary tree  *)
 type t =
 	| Node of t * range * t * int * Int64.t
 	| Empty
 
+(**  compares two ranges [a, b], [c, d]. Returns:
+  *  1 when [a, b] is strictly greater than [c, d]
+  *  -1 when [a, b] is strictly smaller than [c, d]
+  *  0 when [a, b] and [c, d] intersect  *)
 let comp range_one range_two = 
 	let Range(a, b) = range_one
 	in let Range(c, d) = range_two
@@ -12,28 +18,33 @@ let comp range_one range_two =
 		else if a > d then 1
 		else 0
 
+(*  returns height of the tree  *)
 let height = function
 	| Node (_, _, _, h, _) -> h
 	| Empty -> 0
 
+(*  returns number of numbers in the tree  *)
 let get_count = function
 	| Node (_, _, _, _, count) -> count
 	| Empty -> Int64.zero
 
+(*  returns number of numbers in the range [a, b]  *)
 let get_range_sum a b = 
 	let q = Int64.add (Int64.of_int b) Int64.one
 	in Int64.sub q (Int64.of_int a)
 
+(*  makes a tree node, additionally computes number of elements in the created tree  *)
 let make l k r =
 	let Range(a, b) = k
 	in Node (
-	l,
-	k,
-	r,
-	max (height l) (height r) + 1,
-	Int64.add (get_range_sum a b) (Int64.add (get_count l) (get_count r))
-)
+		l,
+		k,
+		r,
+		max (height l) (height r) + 1,
+		Int64.add (get_range_sum a b) (Int64.add (get_count l) (get_count r))
+	)
 
+(*  pSet function  *)
 let bal l k r =
 	let hl = height l in
 	let hr = height r in
@@ -59,16 +70,19 @@ let bal l k r =
 	| Empty -> assert false
 	else make l k r
 
+(*  pSet function  *)
 let rec min_elt = function
 	| Node (Empty, k, _, _, _) -> k
 	| Node (l, _, _, _, _) -> min_elt l
 	| Empty -> raise Not_found
 
+(*  pSet function  *)
 let rec remove_min_elt = function
 	| Node (Empty, _, r, _, _) -> r
 	| Node (l, k, r, _, _) -> bal (remove_min_elt l) k r
 	| Empty -> invalid_arg "PSet.remove_min_elt"
 
+(*  pSet function  *)
 let merge t1 t2 =
 	match t1, t2 with
 	| Empty, _ -> t2
@@ -77,10 +91,13 @@ let merge t1 t2 =
 		let k = min_elt t2 in
 		bal t1 k (remove_min_elt t2)
 
+(*  pSet function  *)
 let empty = Empty
 
+(*  pSet function  *)
 let is_empty x = x = Empty
 
+(*  pSet function, additionally computes number of elements in the returned tree  *)
 let rec add_one x = function
 	| Node (l, k, r, h, num) ->
 		let c = comp x k in
@@ -94,6 +111,7 @@ let rec add_one x = function
 		let Range(a, b) = x
 		in Node (Empty, x, Empty, 1, get_range_sum a b)
 
+(*  pSet function  *)
 let rec join l v r =
 	match (l, r) with
 	| (Empty, _) -> add_one v r
@@ -103,7 +121,7 @@ let rec join l v r =
 		if rh > lh + 2 then bal (join l v rl) rv rr else
 			make l v r
 
-
+(*  pSet function (split)  *)
 let old_split x set =
 	let rec loop x = function
 	| Empty ->
@@ -121,6 +139,8 @@ let old_split x set =
 					let setl, pres, setr = loop x set
 					in setl, pres, setr
 
+(**  if x is present in any range in the tree, returns that range,
+  *  else returns range [1, -1]  *)
 let rec find x = function
 	| Empty -> Range(1, -1)
 	| Node(left, value, right, _, _) ->
@@ -130,6 +150,7 @@ let rec find x = function
 			else if c < 0 then find x left
 			else find x right
 
+(*  returns set with added range [a, b]  *)
 let add (a, b) set = 
 	let (res_left, _, _) =
 		if a = min_int then empty, false, empty else old_split (Range(a - 1, a - 1)) set
@@ -143,10 +164,13 @@ let add (a, b) set =
 	in 
 		add_one (Range(low, high)) new_set
 
+(**  returns set with added range [a, b] if a <= b
+  *  or unchanged set if a > b  *)
 let add_conditional (a, b) set = 
 	if a > b then set
 	else add (a, b) set
 
+(*  returns set with removes range [a, b]  *)
 let remove (a, b) set = 
 	let set = add (a, b) set
 	in let Range(curr_low, curr_high) = find (Range(a, b)) set
@@ -157,6 +181,7 @@ let remove (a, b) set =
 	in 
 		if b = max_int then set else add_conditional (b + 1, curr_high) set
 
+(*  pSet function  *)
 let mem x set =
 	let rec loop = function
 		| Node (l, k, r, _, _) ->
@@ -165,6 +190,10 @@ let mem x set =
 		| Empty -> false
 	in loop set
 
+(**  returns (left, present, right), where
+  *  left is set of elements smaller than x,
+  *  present = [mem x],
+  *  right is set of elements greater than x  *)
 let split x set = 
 	let pres = mem x set
 	in let set = remove (x, x) set
@@ -172,6 +201,7 @@ let split x set =
 	in left, pres, right
 ;;
 
+(*  pSet function  *)
 let iter f set =
 	let rec loop = function
 		| Empty -> ()
@@ -181,6 +211,7 @@ let iter f set =
 			loop r
 	in loop set
 
+(*  pSet function  *)
 let fold f set acc =
 	let rec loop acc = function
 		| Empty -> acc
@@ -188,6 +219,7 @@ let fold f set acc =
 			loop (f (a, b) (loop acc l)) r
 	in loop acc set
 
+(*  pSet function  *)
 let elements set = 
 	let rec loop acc = function
 		| Empty -> acc
@@ -195,6 +227,7 @@ let elements set =
 			loop ((a, b) :: loop acc r) l
 	in loop [] set
 
+(*  returns number of numbers equal or smaller than x in the set  *)
 let below x set = 
 	let rec loop acc = function
 		| Empty -> acc
