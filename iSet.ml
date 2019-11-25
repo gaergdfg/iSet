@@ -1,7 +1,7 @@
 type range = Range of int * int
 type amount = Double of int * int
 type t =
-	| Node of t * range * t * int * amount
+	| Node of t * range * t * int * Int64.t
 	| Empty
 
 let comp range_one range_two = 
@@ -12,51 +12,27 @@ let comp range_one range_two =
 		else if a > d then 1
 		else 0
 
-
-
-let print = Printf.printf "%d "
-
-
-
 let height = function
 	| Node (_, _, _, h, _) -> h
 	| Empty -> 0
 
-let get_number_set = function
-	| Node(_, _, _, _, number) -> number
-	| Empty -> Double(0, 0)
+let get_count = function
+	| Node (_, _, _, _, count) -> count
+	| Empty -> Int64.zero
 
-let add_number number_a x = 
-	let Double(a, b) = number_a
-	in 
-		(* print a; print b; print_string "\n"; *)
-		if a > min_int then Double(min_int, x - (max_int - a))
-		else Double(a + x, b)
-let add_two_numbers number_a number_b = 
-	let Double(x, y) = number_b
-	in
-		let sum = add_number number_a x
-		in add_number sum y
-
-let sub_numbers number_a x =
-	let Double(a, b) = number_a
-	in
-		if b > 0 then
-			let new_x = max 0 (b - x)
-			in Double(a - new_x, b - x)
-		else
-			Double(a - x, b)
-let get_number_range curr_range = 
-	let Range(a, b) = curr_range
-	in
-		let sum1 = add_number (Double(0, 0)) b
-		in let sum2 = sub_numbers sum1 a
-		in add_number sum2 1
+let get_range_sum a b = 
+	let q = Int64.add (Int64.of_int b) Int64.one
+	in Int64.sub q (Int64.of_int a)
 
 let make l k r =
-	let sum_lr = add_two_numbers (get_number_set l) (get_number_set r)
-	in let sum = add_two_numbers sum_lr (get_number_range k)
-	in Node (l, k, r, max (height l) (height r) + 1, sum)
+	let Range(a, b) = k
+	in Node (
+	l,
+	k,
+	r,
+	max (height l) (height r) + 1,
+	Int64.add (get_range_sum a b) (Int64.add (get_count l) (get_count r))
+)
 
 let bal l k r =
 	let hl = height l in
@@ -114,7 +90,9 @@ let rec add_one x = function
 				let nl = add_one x l in bal nl k r
 			else
 				let nr = add_one x r in bal l k nr
-	| Empty -> Node (Empty, x, Empty, 1, get_number_range x)
+	| Empty ->
+		let Range(a, b) = x
+		in Node (Empty, x, Empty, 1, get_range_sum a b)
 
 let rec join l v r =
 	match (l, r) with
@@ -126,7 +104,7 @@ let rec join l v r =
 			make l v r
 
 
-let real_split x set =
+let old_split x set =
 	let rec loop x = function
 	| Empty ->
 		(Empty, false, Empty)
@@ -143,8 +121,6 @@ let real_split x set =
 					let setl, pres, setr = loop x set
 					in setl, pres, setr
 
-let split a = real_split (Range(a, a))
-
 let rec find x = function
 	| Empty -> Range(1, -1)
 	| Node(left, value, right, _, _) ->
@@ -155,14 +131,17 @@ let rec find x = function
 			else find x right
 
 let add (a, b) set = 
-	let (res_left, _, _) = real_split (Range(a - 1, a - 1)) set
-	in let (_, _, res_right) = real_split (Range(b + 1, b + 1)) set
+	let (res_left, _, _) =
+		if a = min_int then empty, false, empty else old_split (Range(a - 1, a - 1)) set
+	in let (_, _, res_right) = 
+		if b = max_int then empty, false, empty else old_split (Range(b + 1, b + 1)) set
 	in let Range(low, low_check) = find (Range(a - 1, a - 1)) set
 	in let Range(high_check, high) = find (Range(b + 1, b + 1)) set
-	in let low = if low > low_check then a else low
-	in let high = if high < high_check then b else high
+	in let low = if a = min_int || low > low_check then a else low
+	in let high = if b = max_int || high < high_check then b else high
 	in let new_set = merge res_left res_right
-	in add_one (Range(low, high)) new_set
+	in 
+		add_one (Range(low, high)) new_set
 
 let add_conditional (a, b) set = 
 	if a > b then set
@@ -171,18 +150,27 @@ let add_conditional (a, b) set =
 let remove (a, b) set = 
 	let set = add (a, b) set
 	in let Range(curr_low, curr_high) = find (Range(a, b)) set
-	in let (left, _, right) = real_split (Range(a, b)) set
+	in let (left, _, right) = old_split (Range(a, b)) set
 	in let set = merge left right
-	in let set = add_conditional (curr_low, a - 1) set
-	in add_conditional (b + 1, curr_high) set
+	in let set =
+		if a = min_int then set else add_conditional (curr_low, a - 1) set
+	in 
+		if b = max_int then set else add_conditional (b + 1, curr_high) set
 
 let mem x set =
 	let rec loop = function
 		| Node (l, k, r, _, _) ->
-			let c = comp (Range(x, x)) k		(* zmienione z x na Range(x, x) *)
+			let c = comp (Range(x, x)) k
 			in c = 0 || loop (if c < 0 then l else r)
 		| Empty -> false
 	in loop set
+
+let split x set = 
+	let pres = mem x set
+	in let set = remove (x, x) set
+	in let left, _, right = old_split (Range(x, x)) set
+	in left, pres, right
+;;
 
 let iter f set =
 	let rec loop = function
@@ -213,26 +201,15 @@ let below x set =
 		| Node(left, Range(a, b), right, _, number) ->
 			let c = comp (Range(a, b)) (Range(x, x))
 			in
-				(* print a; print b; print x; print_string " - "; print c; print_string "\n"; *)
-				if c = 0 then
-					add_two_numbers
-						(add_number acc (x - a + 1))
-						(get_number_set left)
+				if c = 0 then 
+					Int64.add acc (Int64.add (get_range_sum a x) (get_count left))
 				else if c < 0 then
-					let acc = add_two_numbers acc (get_number_set left)
-					in let acc = add_number acc (b - a + 1)
+					let acc = Int64.add acc (get_count left)
+					in let acc = Int64.add acc (get_range_sum a b)
 					in loop acc right
 				else loop acc left
-	in let Double(a, _) = loop (Double(0, 0)) set
-	in a
-
-
-
-
-(*  ---------------------------------------------------------------------------  *)
-
-let s = add (-min_int, max_int) empty;;
-(* test 57 (below max_int s = max_int) true;;
-test 58 (below min_int s = 1) true;; *)
-below max_int s;;
-below min_int s;;
+	in let res = loop Int64.zero set
+	in
+		if compare res Int64.zero < 0 then max_int
+		else if compare res (Int64.of_int max_int) >= 0 then max_int
+		else Int64.to_int res
