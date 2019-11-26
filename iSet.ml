@@ -246,3 +246,27 @@ let below x set =
 		if compare res Int64.zero < 0 then max_int
 		else if compare res (Int64.of_int max_int) >= 0 then max_int
 		else Int64.to_int res
+
+
+
+
+(*    TESTY    *)
+let s = add (10, 12) empty;;
+assert (mem 9 s = false);;
+assert (mem 10 s = true);;
+assert (mem 12 s = true);;
+assert (mem 13 s = false);;
+
+let s = add (1, 1) (add (15, 16) (add (10, 14) (add (6, 9) empty)));;
+assert (mem 10 (remove (10, 10) s) = false);;
+assert (is_empty (remove (1, 20) s) = true);;
+assert (mem 7 (remove (8, 15) s) = true);;
+
+let s = add (-1, 1) (add (3, 7) (add (10, 12) (add (15, 18)
+        (add (-15, -13) empty))));;
+let s = remove (-10, 12) s;;
+assert (is_empty s = false);;
+assert (mem 5 s = false);;
+assert (mem (-10) s = false);;
+assert (mem (-15) s = true);;
+assert (mem 17 s = true);;
